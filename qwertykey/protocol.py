@@ -5,7 +5,7 @@ Reverse-engineered from QwertyKey_Rice_V3.exe
 
 VENDOR_ID = 0x0C45
 PRODUCT_ID = 0x8016
-INTERFACE_NUM = 0  # MI_00
+INTERFACE_NUM = 2  # MI_02 (Vendor custom feature/output endpoint)
 
 REPORT_LENGTH = 65  # 1 byte report ID (0x00) + 64 bytes payload
 CMD_DELAY = 0.035  # 35 milliseconds as defined in config

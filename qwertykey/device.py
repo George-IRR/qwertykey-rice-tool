@@ -30,35 +30,45 @@ class QwertyKeyDevice:
 
     @classmethod
     def find_device(cls, interface=INTERFACE_NUM):
-        """Auto-discover the QwertyKey Rice hidraw device node."""
+        """
+        Auto-discover the QwertyKey Rice hidraw device node.
+        Prioritizes the vendor custom feature interface (Interface 2 / input2),
+        then Interface 0, then any matching node.
+        """
         target_vid = f"{VENDOR_ID:04X}"
         target_pid = f"{PRODUCT_ID:04X}"
-        target_input = f"input{interface}"
+        interfaces = [interface] if interface is not None else [2, 0, 1]
+        if 2 not in interfaces:
+            interfaces.insert(0, 2)
 
+        for iface in interfaces:
+            target_input = f"input{iface}"
+            for path in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
+                dev_name = os.path.basename(path)
+                uevent_path = os.path.join(path, "device", "uevent")
+                if not os.path.exists(uevent_path):
+                    continue
+                with open(uevent_path, "r", errors="ignore") as f:
+                    content = f.read()
+                if target_vid in content and target_pid in content and target_input in content:
+                    node = f"/dev/{dev_name}"
+                    if os.path.exists(node):
+                        return node
+
+        # Fallback: check report descriptors for Vendor-defined usage page 0xFF13
         for path in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
             dev_name = os.path.basename(path)
-            uevent_path = os.path.join(path, "device", "uevent")
-            if not os.path.exists(uevent_path):
-                continue
-            with open(uevent_path, "r", errors="ignore") as f:
-                content = f.read()
-            if target_vid in content and target_pid in content and target_input in content:
-                node = f"/dev/{dev_name}"
-                if os.path.exists(node):
-                    return node
-        
-        # Fallback: any node with matching VID/PID
-        for path in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
-            dev_name = os.path.basename(path)
-            uevent_path = os.path.join(path, "device", "uevent")
-            if not os.path.exists(uevent_path):
-                continue
-            with open(uevent_path, "r", errors="ignore") as f:
-                content = f.read()
-            if target_vid in content and target_pid in content:
-                node = f"/dev/{dev_name}"
-                if os.path.exists(node):
-                    return node
+            rd_path = os.path.join(path, "device", "report_descriptor")
+            if os.path.exists(rd_path):
+                try:
+                    with open(rd_path, "rb") as f:
+                        rd = f.read()
+                    if b"\x06\x13\xff" in rd:  # Vendor Usage Page 0xFF13
+                        node = f"/dev/{dev_name}"
+                        if os.path.exists(node):
+                            return node
+                except OSError:
+                    pass
 
         return None
 
@@ -107,10 +117,19 @@ class QwertyKeyDevice:
         fcntl.ioctl(self.fd, cmd, buf)
         return bytes(buf)
 
-    def send_command(self, payload, delay=CMD_DELAY):
+    def send_command(self, payload, delay=CMD_DELAY, read_back=False):
         self.send_feature_report(payload)
         if delay > 0:
             time.sleep(delay)
+        if read_back:
+            try:
+                res = self.get_feature_report()
+                if delay > 0:
+                    time.sleep(delay)
+                return res
+            except Exception:
+                pass
+        return None
 
     def set_lighting(self, mode=11, r=255, g=0, b=0, brightness=5, speed=3, direction=1, colorful=1):
         """
@@ -122,39 +141,40 @@ class QwertyKeyDevice:
         direction: 1 (Left/Up) or 2 (Right/Down)
         colorful: 1 for rainbow/spectrum, 0 for custom RGB
         """
-        # Step 1: Config enter
+        # Step 1: Config enter (with read_back)
         p1 = bytearray(64)
         p1[0:2] = CMD_CONFIG_ENTER
-        self.send_command(p1)
+        self.send_command(p1, read_back=True)
 
-        # Step 2: Config init
+        # Step 2: Config init (with read_back)
         p2 = bytearray(64)
         p2[0:2] = CMD_CONFIG_INIT
         p2[8] = 0x01
-        self.send_command(p2)
+        self.send_command(p2, read_back=True)
 
         # Step 3: Mode and color packet
         p3 = bytearray(64)
         p3[0] = mode & 0xFF
-        p3[1] = r & 0xFF
-        p3[2] = g & 0xFF
-        p3[3] = b & 0xFF
-        p3[8] = colorful & 0xFF
-        p3[9] = brightness & 0xFF
-        p3[10] = speed & 0xFF
-        p3[11] = direction & 0xFF
+        if mode != 0:
+            p3[1] = r & 0xFF
+            p3[2] = g & 0xFF
+            p3[3] = b & 0xFF
+            p3[8] = colorful & 0xFF
+            p3[9] = brightness & 0xFF
+            p3[10] = speed & 0xFF
+            p3[11] = direction & 0xFF
         p3[14:16] = MAGIC_55AA
-        self.send_command(p3)
+        self.send_command(p3, read_back=False)
 
-        # Step 4: Apply
+        # Step 4: Apply (with read_back)
         p4 = bytearray(64)
         p4[0:2] = CMD_CONFIG_APPLY
-        self.send_command(p4)
+        self.send_command(p4, read_back=True)
 
-        # Step 5: Save/Exit
+        # Step 5: Save/Exit (without read_back)
         p5 = bytearray(64)
         p5[0:2] = CMD_CONFIG_EXIT
-        self.send_command(p5)
+        self.send_command(p5, read_back=False)
 
     def set_side_light(self, mode=1, r=255, g=0, b=0, brightness=5, speed=3):
         """Set keyboard side light mode."""
