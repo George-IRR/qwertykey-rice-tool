@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+env/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Windows binaries (we extracted the assets & reverse-engineered the protocol)
+*.exe
+app/*.exe
+app/*.dll
