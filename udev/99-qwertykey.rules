@@ -1,0 +1,5 @@
+# Udev rules for QwertyKey Rice 60% Keyboard (Microdia / Sonix VID: 0c45, PID: 8016)
+# Grants normal users read/write permissions to the hidraw device nodes.
+
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="8016", MODE="0666", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="8016", MODE="0666", TAG+="uaccess"

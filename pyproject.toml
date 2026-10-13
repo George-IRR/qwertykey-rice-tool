@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwertykey-rice"
+version = "1.0.0"
+description = "Native Linux driver, CLI, and GUI for QwertyKey Rice 60% RGB keyboard with LCD/TFT screen"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "Pillow>=9.0.0",
+    "PyQt5>=5.15.0",
+]
+
+[project.scripts]
+qwertykey = "qwertykey.cli:main"
+qwertykey-gui = "qwertykey.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["qwertykey*"]
+
+[tool.setuptools.package_data]
+qwertykey = ["../app/layouts/*.xml"]
